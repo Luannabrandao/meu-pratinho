@@ -12,14 +12,17 @@ export default defineConfig({
         secure: false,
         rewrite: (path) => path.replace(/^\/api-openclaw/, ''),
         // 🔥 ESTA É A MÁGICA: Força o Vite a injetar os cabeçalhos que o navegador quer ver
-        configure: (proxy, _options) => {
-          proxy.on('error', (err, _req, _res) => {
+        configure: (proxy) => {
+          proxy.on('error', (err) => {
             console.log('Erro no proxy:', err);
           });
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            void proxyReq;
             console.log('Enviando requisição para o OpenClaw:', req.url);
           });
-          proxy.on('proxyRes', (proxyRes, _req, res) => {
+          proxy.on('proxyRes', (proxyRes, req, res) => {
+            void proxyRes;
+            void req;
             res.setHeader('Access-Control-Allow-Origin', '*');
             res.setHeader(
               'Access-Control-Allow-Methods',

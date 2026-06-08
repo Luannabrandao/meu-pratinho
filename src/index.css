@@ -1,0 +1,78 @@
+:root {
+  --color-bg-app: #fffde7;
+  --color-primary: #80deea;
+  --color-secondary: #b2ebf2;
+
+  --color-success: #a5d6a7;
+  --color-danger: #ef9a9a;
+  --color-warning: #ffe082;
+
+  --color-text-main: #2c3e50;
+  --color-text-muted: #7f8c8d;
+  --color-card-bg: #ffffff;
+
+  --radius-bubble: 28px;
+  --radius-button: 18px;
+  --shadow-soft: 0 12px 32px rgba(92, 107, 192, 0.06);
+
+  font-family: 'Poppins', 'Inter', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: #f7fcfc;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+
+  background-image:
+    radial-gradient(circle, rgba(128, 222, 234, 0.2) 15%, transparent 15%),
+    radial-gradient(circle, rgba(255, 224, 130, 0.2) 15%, transparent 15%),
+    radial-gradient(circle, rgba(255, 205, 210, 0.2) 15%, transparent 15%),
+    radial-gradient(circle, rgba(200, 230, 201, 0.2) 15%, transparent 15%);
+  background-size: 64px 64px;
+  background-position:
+    0 0,
+    32px 32px,
+    16px 32px,
+    32px 0;
+}
+
+#root {
+  width: 100%;
+  max-width: 410px;
+  height: 85vh;
+  max-height: 820px;
+  background-color: var(--color-bg-app);
+  border-radius: 40px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+.custom-scroll {
+  scrollbar-width: none;
+}
+
+@media (max-width: 45px) {
+  #root {
+    max-width: 100%;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+}

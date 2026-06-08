@@ -1,31 +1,76 @@
-import { useState } from 'react';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import React, { useEffect, useRef, useState } from 'react';
 import imagemPerigo from '../assets/perigo.png';
 import imagemLiberado from '../assets/liberado.png';
+import {
+  analisarImagemComGemini,
+  analisarTextoComGemini,
+  executarAnaliseLocal,
+  formatarErroGemini,
+  type ResultadoAnalise,
+} from '../services/gemini';
 
 interface ScannerProps {
   alergiasAtivas: string[];
 }
 
-export function Scanner({ alergiasAtivas }: ScannerProps) {
+type EstadoResultado = ResultadoAnalise['veredito'] | 'INFO' | 'ERRO' | '';
+
+export function Scanner({ alergiasAtivas }: Readonly<ScannerProps>) {
   const [textoIngredientes, setTextoIngredientes] = useState('');
   const [carregando, setCarregando] = useState(false);
   const [mensagemResultado, setMensagemResultado] = useState('');
-  const [iconeResultado, setIconeResultado] = useState('');
+  const [estadoResultado, setEstadoResultado] = useState<EstadoResultado>('');
   const [modoInfantilAtivo, setModoInfantilAtivo] = useState(false);
+  const timeoutLimpezaRef = useRef<number | undefined>(undefined);
 
-  const converterArquivoParaGaiPart = async (
-    arquivo: File,
-  ): Promise<{ inlineData: { data: string; mimeType: string } }> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Data = (reader.result as string).split(',')[1];
-        resolve({ inlineData: { data: base64Data, mimeType: arquivo.type } });
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(arquivo);
-    });
+  useEffect(() => {
+    return () => {
+      if (timeoutLimpezaRef.current) {
+        window.clearTimeout(timeoutLimpezaRef.current);
+      }
+    };
+  }, []);
+
+  const cancelarLimpezaAgendada = () => {
+    if (timeoutLimpezaRef.current) {
+      window.clearTimeout(timeoutLimpezaRef.current);
+      timeoutLimpezaRef.current = undefined;
+    }
+  };
+
+  const agendarLimpezaResultado = () => {
+    cancelarLimpezaAgendada();
+    timeoutLimpezaRef.current = window.setTimeout(() => {
+      setTextoIngredientes('');
+      setMensagemResultado('');
+      setEstadoResultado('');
+      setModoInfantilAtivo(false);
+      timeoutLimpezaRef.current = undefined;
+    }, 40000);
+  };
+
+  const alterarTextoIngredientes = (
+    e: React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
+    cancelarLimpezaAgendada();
+    setTextoIngredientes(e.target.value);
+    setMensagemResultado('');
+    setEstadoResultado('');
+    setModoInfantilAtivo(false);
+  };
+
+  const aplicarResultado = (
+    resultado: ResultadoAnalise,
+    mensagemPerigoPadrao: string,
+    mensagemSeguroPadrao: string,
+  ) => {
+    setEstadoResultado(resultado.veredito);
+    setMensagemResultado(
+      resultado.mensagem ||
+        (resultado.veredito === 'PERIGO'
+          ? mensagemPerigoPadrao
+          : mensagemSeguroPadrao),
+    );
   };
 
   const processarFotoComGemini = async (
@@ -34,222 +79,97 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
     const arquivo = e.target.files?.[0];
     if (!arquivo) return;
 
+    cancelarLimpezaAgendada();
     setCarregando(true);
     setModoInfantilAtivo(false);
-    setMensagemResultado('Analisando imagem do rótulo...');
-    setIconeResultado('🕵️');
+    setEstadoResultado('INFO');
+    setMensagemResultado('A analisar a imagem do rotulo...');
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('Chave API não encontrada.');
+      console.log('=== INICIANDO DIGITALIZACAO DE IMAGEM COM GEMINI ===');
+      const resultado = await analisarImagemComGemini(arquivo, alergiasAtivas);
 
-      const ai = new GoogleGenerativeAI(apiKey);
-      const modelo = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
-      const imagemPreparada = await converterArquivoParaGaiPart(arquivo);
-
-      const comandoPrompt = `
-        Você é um Analista de Segurança Alimentar Pediátrica especializado em alergias.
-        Transcreva a lista de ingredientes da imagem e analise se contém os alérgenos ativos da criança ou derivados.
-        ALERGIAS ATIVAS DA CRIANÇA: [${alergiasAtivas.join(', ')}]
-        Responda na primeira linha apenas: PERIGO ou SEGURO. Nas linhas seguintes, transcreva os ingredientes.
-      `;
-
-      const resultadoInstancia = await modelo.generateContent([
-        comandoPrompt,
-        imagemPreparada,
-      ]);
-      const respostaBruta = resultadoInstancia.response.text();
-
-      const linhas = respostaBruta.split('\n');
-      const veredito = linhas[0].toUpperCase().trim();
-      const textoTranscrevido = linhas.slice(1).join('\n').trim();
-
-      setTextoIngredientes(textoTranscrevido || 'Texto extraído com sucesso.');
-
-      if (veredito.includes('PERIGO')) {
-        setIconeResultado('🛑');
-        setMensagemResultado('Componente alérgico detectado na imagem.');
-      } else {
-        setIconeResultado('🎉');
-        setMensagemResultado('Nenhum componente perigoso detectado.');
-      }
-    } catch (erro) {
-      console.error(erro);
-      setIconeResultado('⚠️');
+      console.log('Resposta recebida da API:\n', resultado.bruto);
+      setTextoIngredientes(resultado.ingredientes || resultado.bruto);
+      setEstadoResultado(resultado.veredito);
       setMensagemResultado(
-        'Insira os ingredientes na caixa abaixo para validação manual.',
+        resultado.veredito === 'PERIGO'
+          ? 'Componente alergico detetado na imagem.'
+          : 'Nenhum componente perigoso detetado.',
       );
+      agendarLimpezaResultado();
+    } catch (erro) {
+      console.error('Erro na comunicacao com o Gemini API:', erro);
+      setEstadoResultado('ERRO');
+      setMensagemResultado(formatarErroGemini(erro));
+      agendarLimpezaResultado();
     } finally {
       setCarregando(false);
+      console.log('=== FIM DO PROCESSAMENTO DA IMAGEM ===');
+      e.target.value = '';
     }
   };
 
-  const analisarTextoDigitado = async (textoDoRotulo: string) => {
-    const textoLimpo = textoDoRotulo.trim();
+  const analisarTextoDigitado = async (textoDoRotulo?: string) => {
+    const textoParaUsar =
+      typeof textoDoRotulo === 'string' ? textoDoRotulo : textoIngredientes;
+    const textoLimpo = textoParaUsar.trim();
     if (!textoLimpo) return;
 
+    cancelarLimpezaAgendada();
     const palavras = textoLimpo.split(/\s+/);
     const pareceNomeDeProduto =
       palavras.length <= 3 && !textoLimpo.toLowerCase().includes('ingrediente');
 
     if (pareceNomeDeProduto) {
       setModoInfantilAtivo(true);
-      setIconeResultado('🔍');
-      setMensagemResultado(
-        'Chame um adulto para te ajudar a ler o rótulo! 🕵️‍♂️✨',
-      );
+      setEstadoResultado('INFO');
+      setMensagemResultado('Chame um adulto para te ajudar a ler o rotulo.');
+      agendarLimpezaResultado();
       return;
     }
 
     setModoInfantilAtivo(false);
     setCarregando(true);
-    setMensagemResultado('Analisando the text...');
-    setIconeResultado('🧠');
+    setEstadoResultado('INFO');
+    setMensagemResultado('A analisar o texto...');
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      const ai = new GoogleGenerativeAI(apiKey);
-      const modelo = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      console.log('=== INICIANDO ANALISE DE TEXTO COM GEMINI ===');
+      const resultado = await analisarTextoComGemini(
+        textoLimpo,
+        alergiasAtivas,
+      );
 
-      const comandoPrompt = `
-        Você é um Analista de Segurança Alimentar Pediátrica especializado em alergias. Analise se o texto contém algum dos alérgenos ativos ou seus derivados químicos.
-        ALERGIAS ATIVAS: [${alergiasAtivas.join(', ')}]
-        Responda estritamente: PERIGO ou SEGURO.
-        Texto: "${textoLimpo}"
-      `;
-
-      const resultadoInstancia = await modelo.generateContent(comandoPrompt);
-      const respostaIA = resultadoInstancia.response
-        .text()
-        .toUpperCase()
-        .trim();
-
-      if (respostaIA.includes('PERIGO')) {
-        setIconeResultado('🛑');
-        setMensagemResultado(
-          'Componente alérgico detectado pela Inteligência Artificial.',
-        );
-      } else {
-        setIconeResultado('🎉');
-        setMensagemResultado('Nenhum componente perigoso foi detectado.');
-      }
+      console.log('Resposta recebida da API:\n', resultado.bruto);
+      aplicarResultado(
+        resultado,
+        'Componente alergico detetado pela Inteligencia Artificial.',
+        'Nenhum componente perigoso foi detetado.',
+      );
+      agendarLimpezaResultado();
     } catch (erro) {
-      console.error(erro);
-      executarAnaliseLocal(textoLimpo);
+      console.error(
+        'Falha na chamada da API, acionando analise local de seguranca:',
+        erro,
+      );
+      const resultadoLocal = executarAnaliseLocal(textoLimpo, alergiasAtivas);
+      aplicarResultado(
+        resultadoLocal,
+        'Componente alergico detetado para o perfil da crianca!',
+        'Nenhum componente perigoso foi detetado no texto.',
+      );
+      agendarLimpezaResultado();
     } finally {
       setCarregando(false);
+      console.log('=== FIM DO PROCESSAMENTO DE TEXTO ===');
     }
   };
 
-
-  const executarAnaliseLocal = (textoParaVerificar: string) => {
-    const textoMinusculo = textoParaVerificar.toLowerCase();
-
-    const encontrouAlergia = alergiasAtivas.some((alergia) => {
-      const termo = alergia.toLowerCase().trim();
-
-      if (termo === 'leite') {
-        return (
-          textoMinusculo.includes('leite') ||
-          textoMinusculo.includes('caseina') ||
-          textoMinusculo.includes('caseína') ||
-          textoMinusculo.includes('caseinato') ||
-          textoMinusculo.includes('lactose') ||
-          textoMinusculo.includes('soro de leite') ||
-          textoMinusculo.includes('whey') ||
-          textoMinusculo.includes('manteiga') ||
-          textoMinusculo.includes('cream cheese') ||
-          textoMinusculo.includes('requeijao') ||
-          textoMinusculo.includes('requeijão') ||
-          textoMinusculo.includes('queijo') ||
-          textoMinusculo.includes('nata') ||
-          textoMinusculo.includes('creme de leite') ||
-          textoMinusculo.includes('iogurte') ||
-          textoMinusculo.includes('coalhada') ||
-          textoMinusculo.includes('lactofre') ||
-          textoMinusculo.includes('lactalbumina') ||
-          textoMinusculo.includes('lactoglobulina') ||
-          textoMinusculo.includes('gordura anidra de leite')
-        );
-      }
-
-      if (termo === 'ovo') {
-        return (
-          textoMinusculo.includes('ovo') ||
-          textoMinusculo.includes('gema') ||
-          textoMinusculo.includes('clara') ||
-          textoMinusculo.includes('albumina') ||
-          textoMinusculo.includes('ovalbumina') ||
-          textoMinusculo.includes('ovomucina') ||
-          textoMinusculo.includes('ovomucoide') ||
-          textoMinusculo.includes('ovomucóide') ||
-          textoMinusculo.includes('lisozima') ||
-          textoMinusculo.includes('maionese')
-        );
-      }
-
-      if (termo === 'amendoim' || termo === 'amendoím') {
-        return (
-          textoMinusculo.includes('amendoim') ||
-          textoMinusculo.includes('amendoím') ||
-          textoMinusculo.includes('arachis') ||
-          textoMinusculo.includes('paçoca') ||
-          textoMinusculo.includes('pacoca') ||
-          textoMinusculo.includes('praline') ||
-          textoMinusculo.includes('praliné') ||
-          textoMinusculo.includes('nougat')
-        );
-      }
-
-      if (termo === 'glúten' || termo === 'gluten' || termo === 'trigo') {
-        return (
-          textoMinusculo.includes('gluten') ||
-          textoMinusculo.includes('glúten') ||
-          textoMinusculo.includes('trigo') ||
-          textoMinusculo.includes('centeio') ||
-          textoMinusculo.includes('cevada') ||
-          textoMinusculo.includes('aveia') ||
-          textoMinusculo.includes('malte') ||
-          textoMinusculo.includes('sêmola') ||
-          textoMinusculo.includes('semolina') ||
-          textoMinusculo.includes('germe de trigo') ||
-          textoMinusculo.includes('farelo de trigo')
-        );
-      }
-
-      if (termo === 'soja') {
-        return (
-          textoMinusculo.includes('soja') ||
-          textoMinusculo.includes('lecitina de soja') ||
-          textoMinusculo.includes('tofu') ||
-          textoMinusculo.includes('shoyu') ||
-          textoMinusculo.includes('missô') ||
-          textoMinusculo.includes('misso')
-        );
-      }
-
-      return textoMinusculo.includes(termo);
-    });
-
-    if (encontrouAlergia) {
-      setIconeResultado('🛑');
-      setMensagemResultado(
-        'Componente alérgico detectado para o perfil da criança!',
-      );
-    } else {
-      setIconeResultado('🎉');
-      setMensagemResultado(
-        'Nenhum componente perigoso foi detectado no texto.',
-      );
-    }
-  };
-
-
-  let corBordaBalao = '2px solid #FFE082'; 
+  let corBordaBalao = '2px solid #FFE082';
   if (!carregando) {
-    if (modoInfantilAtivo) corBordaBalao = '2px solid #FFE082';
-    else if (iconeResultado === '🛑') corBordaBalao = '2px solid #FFCDD2';
-    else if (iconeResultado === '🎉') corBordaBalao = '2px solid #E0F2F1';
+    if (estadoResultado === 'PERIGO') corBordaBalao = '2px solid #FFCDD2';
+    else if (estadoResultado === 'SEGURO') corBordaBalao = '2px solid #E0F2F1';
   }
 
   return (
@@ -263,7 +183,6 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
         padding: '10px 0',
       }}
     >
-     
       <div
         style={{
           width: '100%',
@@ -280,7 +199,16 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
           textAlign: 'center',
         }}
       >
-        <span style={{ fontSize: '2.5rem' }}>📷</span>
+        <span
+          aria-hidden="true"
+          style={{
+            fontSize: '3rem',
+            lineHeight: 1,
+            marginBottom: '2px',
+          }}
+        >
+          📷
+        </span>
         <span
           style={{
             fontSize: '0.85rem',
@@ -289,9 +217,7 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
             fontWeight: '500',
           }}
         >
-          {carregando
-            ? 'Processando Imagem...'
-            : 'Envie uma foto real de um rótulo'}
+          {carregando ? 'Processando imagem...' : 'Envie uma foto de um rotulo'}
         </span>
         <input
           type="file"
@@ -319,7 +245,7 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
         <textarea
           placeholder="Digite ou cole os ingredientes aqui..."
           value={textoIngredientes}
-          onChange={(e) => setTextoIngredientes(e.target.value)}
+          onChange={alterarTextoIngredientes}
           rows={5}
           style={{
             width: '100%',
@@ -354,10 +280,9 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
             transition: 'all 0.2s ease',
           }}
         >
-          🔍 Validar Ingredientes
+          {carregando ? 'Analisando...' : 'Validar ingredientes'}
         </button>
       </div>
-
 
       {mensagemResultado && (
         <div
@@ -375,13 +300,12 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
             border: corBordaBalao,
           }}
         >
-
           {modoInfantilAtivo && (
-            <span style={{ fontSize: '4.5rem', marginBottom: '4px' }}>
-              🕵️‍♂️🧭
+            <span style={{ fontSize: '3rem', marginBottom: '4px' }}>
+              Alerta
             </span>
           )}
-          {!modoInfantilAtivo && iconeResultado === '🛑' && (
+          {!modoInfantilAtivo && estadoResultado === 'PERIGO' && (
             <img
               src={imagemPerigo}
               alt="Perigo"
@@ -393,7 +317,7 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
               }}
             />
           )}
-          {!modoInfantilAtivo && iconeResultado === '🎉' && (
+          {!modoInfantilAtivo && estadoResultado === 'SEGURO' && (
             <img
               src={imagemLiberado}
               alt="Liberado"
@@ -406,13 +330,12 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
             />
           )}
           {!modoInfantilAtivo &&
-            iconeResultado !== '🛑' &&
-            iconeResultado !== '🎉' && (
-              <span style={{ fontSize: '3rem', marginBottom: '4px' }}>
-                {iconeResultado}
+            estadoResultado !== 'PERIGO' &&
+            estadoResultado !== 'SEGURO' && (
+              <span style={{ fontSize: '2rem', marginBottom: '4px' }}>
+                {estadoResultado === 'ERRO' ? 'Atencao' : 'Analise'}
               </span>
             )}
-
 
           {modoInfantilAtivo && (
             <h2
@@ -426,7 +349,7 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
               EI, DETETIVE!
             </h2>
           )}
-          {!modoInfantilAtivo && iconeResultado === '🛑' && (
+          {!modoInfantilAtivo && estadoResultado === 'PERIGO' && (
             <h2
               style={{
                 fontSize: '1.4rem',
@@ -438,7 +361,7 @@ export function Scanner({ alergiasAtivas }: ScannerProps) {
               PERIGO!
             </h2>
           )}
-          {!modoInfantilAtivo && iconeResultado === '🎉' && (
+          {!modoInfantilAtivo && estadoResultado === 'SEGURO' && (
             <h2
               style={{
                 fontSize: '1.4rem',

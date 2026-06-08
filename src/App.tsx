@@ -28,7 +28,7 @@ function App() {
         setCriancas(lista);
         if (lista.length > 0) setIdCriancaAtiva(lista[0].id);
       } catch (e) {
-        console.error('Erro ao ler localStorage, resetando...', e);
+        console.error('Erro ao ler localStorage, reiniciando...', e);
         // eslint-disable-next-line react-hooks/immutability
         resetarPerfilPadrao();
       }
@@ -124,7 +124,7 @@ function App() {
             fontWeight: 'bold',
           }}
         >
-          🔄 Carregando perfis em segurança...
+          🔄 A carregar perfis em segurança...
         </div>
       );
     }
@@ -142,7 +142,7 @@ function App() {
               paddingBottom: '10px',
             }}
           >
-            {/* 1. CARD PERFIL  DA CRIANÇA */}
+            {/* CARD PERFIL RESUMIDO DA CRIANÇA */}
             <div
               style={{
                 backgroundColor: '#FFFFFF',
@@ -228,6 +228,7 @@ function App() {
               </div>
             </div>
 
+            {/* CARD DE ALERTA */}
             <div
               style={{
                 backgroundColor: '#FFFFFF',
@@ -266,11 +267,12 @@ function App() {
                     lineHeight: '1.4',
                   }}
                 >
-                  Verifique sempre traços de contaminação cruzada.
+                  Verifique sempre vestígios de contaminação cruzada.
                 </p>
               </div>
             </div>
 
+            {/* BOTÃO SOS */}
             <a
               href="tel:192"
               style={{
@@ -292,6 +294,7 @@ function App() {
               <span>🚨</span> LIGAÇÃO DE EMERGÊNCIA (SAMU 192)
             </a>
 
+            {/* LOCALIZADOR DE HOSPITAIS */}
             <div
               style={{
                 backgroundColor: '#FFFFFF',
@@ -435,21 +438,12 @@ function App() {
       }}
     >
       <style>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-
-        /* Configurações padrão para celular */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .responsive-logo-box { width: 50px; height: 50px; }
         .responsive-title { font-size: 1.5rem; }
         .responsive-subtitle { font-size: 0.75rem; }
         .responsive-strawberry { width: 65px; height: 65px; }
-
-        /* 🖥️ Ajustes automáticos quando a tela for maior (Tablets, Notebooks e PCs) */
         @media (min-width: 480px) {
           .responsive-logo-box { width: 70px; height: 70px; border-width: 3px !important; }
           .responsive-title { font-size: 2rem; }
@@ -529,12 +523,7 @@ function App() {
 
       <main
         className="no-scrollbar"
-        style={{
-          flex: 1,
-          width: '100%',
-          overflowY: 'auto',
-          display: 'block',
-        }}
+        style={{ flex: 1, width: '100%', overflowY: 'auto', display: 'block' }}
       >
         {renderizarTelaAtiva()}
       </main>
