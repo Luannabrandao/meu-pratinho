@@ -65,5 +65,5 @@ IA pode sofrer variações em suas respostas. Para garantir a segurança máxima
    npm run dev
 
 
-📝 #Licença
+📝 #
 Este projeto é para fins acadêmicos e de portfólio profissional.
