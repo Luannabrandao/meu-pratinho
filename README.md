@@ -67,4 +67,3 @@ IA pode sofrer variações em suas respostas. Para garantir a segurança máxima
 
 📝 #Licença
 Este projeto é para fins acadêmicos e de portfólio profissional.
-```
