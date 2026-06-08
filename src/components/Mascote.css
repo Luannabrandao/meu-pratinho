@@ -1,0 +1,24 @@
+/* O corpinho redondo do nosso mascote - Agora bem maior e imponente */
+.mascote-avatar {
+  width: 180px; /* Aumentado de 120px para 180px */
+  height: 180px; /* Aumentado de 120px para 180px */
+  border-radius: 50%;
+  background-color: var(--color-card-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-soft);
+  border: 6px solid var(--color-secondary); /* Borda um pouco mais grossa para acompanhar */
+  font-size: 80px; /* Emoji maior para destacar a expressão */
+  transition: transform 0.3s ease;
+}
+
+/* O balão de fala ou legenda abaixo do mascote */
+.mascote-texto {
+  font-size: 1.4rem; /* Aumentado de 1.1rem para 1.4rem */
+  font-weight: 700; /* Um pouco mais negrito para leitura lúdica */
+  color: var(--color-text-main);
+  max-width: 400px; /* Permitindo que o texto ocupe mais espaço horizontal */
+  line-height: 1.5;
+  margin-top: 12px;
+}
